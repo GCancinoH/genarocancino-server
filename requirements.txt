@@ -1,0 +1,4 @@
+Flask
+Flask-Mail
+firebase-admin
+python-dotenv
