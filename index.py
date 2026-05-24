@@ -5,9 +5,9 @@ import secrets
 import string
 from flask import Flask, request, jsonify, render_template
 from flask_mail import Mail, Message
-import firebase_admin
-from firebase_admin import auth, credentials, firestore
+from firebase_admin import auth, firestore
 from dotenv import load_dotenv
+from firebase_config import initialize_firebase
 from decorators import require_role
 
 load_dotenv()
@@ -28,27 +28,7 @@ app.config.update(
 
 mail = Mail(app)
 
-# Firebase Config
-raw_private_key = os.environ.get("FIREBASE_PRIVATE_KEY")
-if raw_private_key:
-    # This ensures Python treats '\n' as an actual newline character
-    private_key = raw_private_key.replace("\\n", "\n")
-else:
-    private_key = None
-
-if not firebase_admin._apps:
-    cred = credentials.Certificate({
-        "type": "service_account",
-        "project_id": os.environ.get("FIREBASE_PROJECT_ID"),
-        "private_key": private_key,
-        "client_email": os.environ.get("FIREBASE_CLIENT_EMAIL"),
-        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-        "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40gc-nutrition.iam.gserviceaccount.com",
-        "universe_domain": "googleapis.com"
-    })
-    firebase_admin.initialize_app(cred)
+initialize_firebase()
 
 
 def send_new_player_email(email, display_name, password, premium_until_timestamp):

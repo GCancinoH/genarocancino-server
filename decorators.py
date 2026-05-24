@@ -1,20 +1,9 @@
-import os
-import firebase_admin
-from firebase_admin import credentials, auth
+from firebase_admin import auth
 from flask import g, request, jsonify
 from functools import wraps
-from dotenv import load_dotenv
+from firebase_config import initialize_firebase
 
-load_dotenv()
-
-# Initialize Firebase Admin (once)
-if not firebase_admin._apps:
-    firebase_credentials_path = os.getenv(
-        "FIREBASE_SERVICE_ACCOUNT_PATH",
-        os.path.join(os.path.dirname(__file__), "python-fb.json")
-    )
-    cred = credentials.Certificate(firebase_credentials_path)
-    firebase_admin.initialize_app(cred)
+initialize_firebase()
     
 def verify_firebase_token(f):
     @wraps(f)
