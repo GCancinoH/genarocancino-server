@@ -11,7 +11,7 @@ os.environ["ALLOWED_ORIGINS"] = "http://localhost:4200,https://app.example"
 os.environ["RATELIMIT_STORAGE_URI"] = "memory://"
 
 import index  # noqa: E402
-from security import UpstashRedisRateLimiter, parse_rate_limit  # noqa: E402
+from security import configure_rate_limits  # noqa: E402
 
 
 class DummyDocument:
@@ -115,32 +115,25 @@ def test_invalid_player_creation_payload_returns_400(monkeypatch):
     assert "details" in payload
 
 
-def test_upstash_rate_limiter_returns_429_after_limit(monkeypatch):
+def test_flask_limiter_uses_configured_storage_uri_and_enforces_limits():
     app = Flask(__name__)
     app.config["TESTING"] = True
-    limiter = UpstashRedisRateLimiter("https://example.upstash.io", "token")
-    counts = iter([1, 2])
-    monkeypatch.setattr(limiter, "_increment_window", lambda key, window_seconds: next(counts))
+    app.config["RATELIMIT_STORAGE_URI"] = "memory://"
+    app.config["RATELIMIT_STRATEGY"] = "fixed-window"
+    limiter = configure_rate_limits(app)
 
-    @app.route("/api/test-upstash-rate-limit")
+    @app.route("/api/test-rate-limit")
     @limiter.limit("1 per minute")
-    def test_upstash_rate_limit_route():
+    def test_rate_limit_route():
         return jsonify({"status": "ok"}), 200
 
     client = app.test_client()
 
-    first_response = client.get("/api/test-upstash-rate-limit")
-    second_response = client.get("/api/test-upstash-rate-limit")
+    first_response = client.get("/api/test-rate-limit")
+    second_response = client.get("/api/test-rate-limit")
 
     assert first_response.status_code == 200
     assert second_response.status_code == 429
-    assert second_response.get_json() == {"error": "Rate limit exceeded"}
-    assert second_response.headers["Retry-After"] == "60"
-
-
-def test_parse_rate_limit_supports_existing_config_values():
-    assert parse_rate_limit("10 per hour") == (10, 3600)
-    assert parse_rate_limit("60 per minute") == (60, 60)
 
 
 def test_player_creation_does_not_return_password_but_still_emails_it(monkeypatch):

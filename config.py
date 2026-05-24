@@ -31,9 +31,6 @@ class Config:
 
     SECURITY_HEADERS_ENABLED = os.environ.get("SECURITY_HEADERS_ENABLED", "true").lower() == "true"
     RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI") or "memory://"
-    UPSTASH_REDIS_REST_URL = os.environ.get("UPSTASH_REDIS_REST_URL")
-    UPSTASH_REDIS_REST_TOKEN = os.environ.get("UPSTASH_REDIS_REST_TOKEN")
-    RATELIMIT_KEY_PREFIX = os.environ.get("RATELIMIT_KEY_PREFIX", "flask-rate-limit")
-    RATELIMIT_FAIL_OPEN = os.environ.get("RATELIMIT_FAIL_OPEN", "true").lower() == "true"
+    RATELIMIT_STRATEGY = os.environ.get("RATELIMIT_STRATEGY", "moving-window")
     PLAYER_CREATION_RATE_LIMIT = os.environ.get("PLAYER_CREATION_RATE_LIMIT", "10 per hour")
     PLAYERS_LIST_RATE_LIMIT = os.environ.get("PLAYERS_LIST_RATE_LIMIT", "60 per minute")
