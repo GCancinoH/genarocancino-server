@@ -28,12 +28,26 @@ app.config.update(
 
 mail = Mail(app)
 
+# Firebase Config
+raw_private_key = os.environ.get("FIREBASE_PRIVATE_KEY")
+if raw_private_key:
+    # This ensures Python treats '\n' as an actual newline character
+    private_key = raw_private_key.replace("\\n", "\n")
+else:
+    private_key = None
+
 if not firebase_admin._apps:
-    firebase_credentials_path = os.environ.get(
-        'FIREBASE_SERVICE_ACCOUNT_PATH',
-        os.path.join(os.path.dirname(__file__), 'python-fb.json')
-    )
-    cred = credentials.Certificate(firebase_credentials_path)
+    cred = credentials.Certificate({
+        "type": "service_account",
+        "project_id": os.environ.get("FIREBASE_PROJECT_ID"),
+        "private_key": private_key,
+        "client_email": os.environ.get("FIREBASE_CLIENT_EMAIL"),
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40gc-nutrition.iam.gserviceaccount.com",
+        "universe_domain": "googleapis.com"
+    })
     firebase_admin.initialize_app(cred)
 
 
