@@ -6,8 +6,24 @@ from firebase_admin import credentials
 
 load_dotenv()
 
+REQUIRED_FIREBASE_ENV_VARS = [
+    "FIREBASE_PROJECT_ID",
+    "FIREBASE_PRIVATE_KEY",
+    "FIREBASE_CLIENT_EMAIL",
+]
+
+
+def validate_firebase_env():
+    missing = [name for name in REQUIRED_FIREBASE_ENV_VARS if not os.environ.get(name)]
+    if missing:
+        raise RuntimeError(
+            "Missing required Firebase environment variables: " + ", ".join(missing)
+        )
+
 
 def get_firebase_credentials():
+    validate_firebase_env()
+
     raw_private_key = os.environ.get("FIREBASE_PRIVATE_KEY")
     private_key = raw_private_key.replace("\\n", "\n") if raw_private_key else None
 
@@ -28,6 +44,9 @@ def get_firebase_credentials():
 
 
 def initialize_firebase():
+    if os.environ.get("SKIP_FIREBASE_INIT", "false").lower() == "true":
+        return
+
     if not firebase_admin._apps:
         cred = credentials.Certificate(get_firebase_credentials())
         firebase_admin.initialize_app(cred)

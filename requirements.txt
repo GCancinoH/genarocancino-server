@@ -2,3 +2,9 @@ Flask
 Flask-Mail
 firebase-admin
 python-dotenv
+flask-cors
+marshmallow
+email-validator
+pytest
+Flask-Limiter
+redis

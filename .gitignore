@@ -1,1 +1,11 @@
 python-fb.json
+# Ignorar carpetas de cache de Python (en cualquier nivel del proyecto)
+**/__pycache__/
+*.pyc
+
+# Ignorar todos los archivos Markdown y JSON
+*.md
+*.json
+.env
+.env.example
+.gitignore
