@@ -14,15 +14,15 @@ load_dotenv()
 
 app = Flask(__name__)
 app.config.update(
-    MAIL_SERVER=os.environ.get('MAIL_SERVER', 'smtp.gmail.com'),
-    MAIL_PORT=int(os.environ.get('MAIL_PORT', 587)),
-    MAIL_USE_TLS=os.environ.get('MAIL_USE_TLS', 'true').lower() == 'true',
-    MAIL_USE_SSL=os.environ.get('MAIL_USE_SSL', 'false').lower() == 'true',
-    MAIL_USERNAME=os.environ.get('MAIL_USERNAME', 'g.cancinoh@gmail.com'),
-    MAIL_PASSWORD=os.environ.get('MAIL_PASSWORD', "SoyMillonario!|$1MillónUSD|"),
+    MAIL_SERVER='smtp.gmail.com',
+    MAIL_PORT=587,
+    MAIL_USE_TLS='true',
+    MAIL_USE_SSL='true',
+    MAIL_USERNAME=os.environ.get('GOOGLE_MAIL'),
+    MAIL_PASSWORD=os.environ.get('GOOGLE_MAIL_PASSWORD'),
     MAIL_DEFAULT_SENDER=(
         os.environ.get('MAIL_SENDER_NAME', 'Sistema Ascenso'),
-        os.environ.get('MAIL_USERNAME', 'g.cancinoh@gmail.com')
+        os.environ.get('GOOGLE_MAIL')
     ),
 )
 
