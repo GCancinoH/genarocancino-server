@@ -4,6 +4,7 @@ python-fb.json
 # Entorno local.
 .env
 .env.example
+.venv
 
 # Cache de Python.
 **/__pycache__/
