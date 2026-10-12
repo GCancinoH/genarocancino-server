@@ -69,7 +69,16 @@ Ingresa al sistema y cambia tu contraseña lo antes posible.
 
 @app.route('/api/health')
 def health():
-    return jsonify({"status": "ok"}), 200
+    """Liveness + diagnóstico de configuración.
+
+    No expone secretos: solo indica si las credenciales SMTP están
+    presentes, para poder saber sin mirar los logs si el correo de
+    bienvenida va a poder enviarse.
+    """
+    return jsonify({
+        "status": "ok",
+        "mailConfigured": bool(app.config.get("MAIL_USERNAME") and app.config.get("MAIL_PASSWORD")),
+    }), 200
 
 
 @app.route('/home')
