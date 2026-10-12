@@ -1,11 +1,15 @@
+# Credenciales del Admin SDK — NUNCA al repo.
 python-fb.json
-# Ignorar carpetas de cache de Python (en cualquier nivel del proyecto)
-**/__pycache__/
-*.pyc
 
-# Ignorar todos los archivos Markdown y JSON
-*.md
-*.json
+# Entorno local.
 .env
 .env.example
-.gitignore
+
+# Cache de Python.
+**/__pycache__/
+*.pyc
+.pytest_cache/
+
+# Documentación interna.
+docs/
+*.md

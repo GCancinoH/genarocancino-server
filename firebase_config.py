@@ -1,3 +1,5 @@
+import base64
+import json
 import os
 
 import firebase_admin
@@ -11,6 +13,30 @@ REQUIRED_FIREBASE_ENV_VARS = [
     "FIREBASE_PRIVATE_KEY",
     "FIREBASE_CLIENT_EMAIL",
 ]
+
+
+def _certificate_from_b64():
+    """Service account completa codificada en base64 (recomendado en Vercel).
+
+    Ventaja sobre las variables sueltas: no hay que partir la private key a
+    mano ni escapar los saltos de línea. Se genera con:
+
+        base64 -w 0 server/python-fb.json
+    """
+    encoded = os.environ.get("FIREBASE_SERVICE_ACCOUNT_B64")
+    if not encoded:
+        return None
+
+    try:
+        # Tolera que la variable venga con saltos de línea o espacios.
+        service_account_info = json.loads(base64.b64decode(encoded).decode("utf-8"))
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise RuntimeError(
+            "FIREBASE_SERVICE_ACCOUNT_B64 no es un JSON válido en base64. "
+            "Regenerala con: base64 -w 0 server/python-fb.json"
+        ) from exc
+
+    return credentials.Certificate(service_account_info)
 
 
 def validate_firebase_env():
@@ -48,5 +74,8 @@ def initialize_firebase():
         return
 
     if not firebase_admin._apps:
-        cred = credentials.Certificate(get_firebase_credentials())
-        firebase_admin.initialize_app(cred)
+        # Prioridad: service account completa en base64 > variables sueltas.
+        cert = _certificate_from_b64()
+        if cert is None:
+            cert = credentials.Certificate(get_firebase_credentials())
+        firebase_admin.initialize_app(cert)
