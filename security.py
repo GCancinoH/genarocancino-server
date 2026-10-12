@@ -1,6 +1,4 @@
 from flask_cors import CORS
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 
 
 def configure_cors(app, allowed_origins):
@@ -24,13 +22,3 @@ def configure_security_headers(app):
         response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
         response.headers.setdefault("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
         return response
-
-
-def configure_rate_limits(app):
-    return Limiter(
-        key_func=get_remote_address,
-        app=app,
-        storage_uri=app.config.get("RATELIMIT_STORAGE_URI", "memory://"),
-        strategy=app.config.get("RATELIMIT_STRATEGY", "moving-window"),
-        default_limits=[],
-    )

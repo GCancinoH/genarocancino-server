@@ -6,4 +6,3 @@ flask-cors
 marshmallow
 email-validator
 pytest
-Flask-Limiter[redis]

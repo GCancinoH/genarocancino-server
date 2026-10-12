@@ -11,7 +11,7 @@ from config import Config
 from decorators import require_role
 from errors import error_response
 from firebase_config import initialize_firebase
-from security import configure_cors, configure_rate_limits, configure_security_headers
+from security import configure_cors, configure_security_headers
 from validators import validate_player_creation_payload
 
 app = Flask(__name__)
@@ -20,7 +20,6 @@ app.config.from_object(Config)
 configure_cors(app, app.config["ALLOWED_ORIGINS"])
 if app.config["SECURITY_HEADERS_ENABLED"]:
     configure_security_headers(app)
-limiter = configure_rate_limits(app)
 
 mail = Mail(app)
 
@@ -84,7 +83,6 @@ def hello_world():
 
 
 @app.route("/api/v1/players", methods=["GET"])
-@limiter.limit(lambda: app.config["PLAYERS_LIST_RATE_LIMIT"])
 @require_role("admin")
 def list_players():
     try:
@@ -110,7 +108,6 @@ def list_players():
 
 
 @app.route("/api/v1/player-creation", methods=["POST"])
-@limiter.limit(lambda: app.config["PLAYER_CREATION_RATE_LIMIT"])
 @require_role("admin")
 def player_creation():
     try:

@@ -30,7 +30,3 @@ class Config:
     )
 
     SECURITY_HEADERS_ENABLED = os.environ.get("SECURITY_HEADERS_ENABLED", "true").lower() == "true"
-    RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI") or "memory://"
-    RATELIMIT_STRATEGY = os.environ.get("RATELIMIT_STRATEGY", "moving-window")
-    PLAYER_CREATION_RATE_LIMIT = os.environ.get("PLAYER_CREATION_RATE_LIMIT", "10 per hour")
-    PLAYERS_LIST_RATE_LIMIT = os.environ.get("PLAYERS_LIST_RATE_LIMIT", "60 per minute")
