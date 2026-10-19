@@ -30,3 +30,20 @@ def validate_player_creation_payload(payload):
         data.pop("edad", None)
 
     return data
+
+
+class PlayerDeletionSchema(Schema):
+    """Borrado duro de una cuenta de jugador.
+
+    Solo viaja el UID: el correo no se necesita y reduce la superficie de
+    lo que un cliente malicioso podría mandar.
+    """
+
+    uid = fields.String(required=True, validate=validate.Length(min=1, max=128))
+
+
+def validate_player_deletion_payload(payload):
+    if not payload:
+        raise ValidationError({"body": ["JSON body is required"]})
+
+    return PlayerDeletionSchema(unknown=EXCLUDE).load(payload)

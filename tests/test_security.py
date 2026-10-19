@@ -143,3 +143,90 @@ def test_player_creation_does_not_return_password_but_still_emails_it(monkeypatc
     assert "password" not in payload
     assert payload["emailSent"] is True
     assert sent_email_args["password"].startswith("Player@")
+
+
+def test_player_deletion_requires_admin(monkeypatch):
+    client = index.app.test_client()
+
+    response = client.post("/api/v1/player-deletion", json={"uid": "user-123"})
+
+    assert response.status_code == 401
+
+
+def test_player_deletion_rejects_payload_without_uid(monkeypatch):
+    authenticate_as_admin(monkeypatch)
+    client = index.app.test_client()
+
+    response = client.post(
+        "/api/v1/player-deletion",
+        json={},
+        headers={"Authorization": "Bearer valid-admin-token"},
+    )
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["error"] == "Invalid request"
+    assert "details" in payload
+
+
+def test_player_deletion_deletes_auth_account_and_returns_no_password(monkeypatch):
+    authenticate_as_admin(monkeypatch)
+    deleted_uids = []
+
+    monkeypatch.setattr(
+        index.auth,
+        "delete_user",
+        lambda uid: deleted_uids.append(uid),
+    )
+    client = index.app.test_client()
+
+    response = client.post(
+        "/api/v1/player-deletion",
+        json={"uid": "user-123"},
+        headers={"Authorization": "Bearer valid-admin-token"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["uid"] == "user-123"
+    assert "password" not in payload
+    assert deleted_uids == ["user-123"]
+
+
+def test_player_deletion_is_idempotent_when_account_is_already_gone(monkeypatch):
+    authenticate_as_admin(monkeypatch)
+
+    def raise_not_found(uid):
+        raise index.auth.UserNotFoundError("User not found")
+
+    monkeypatch.setattr(index.auth, "delete_user", raise_not_found)
+    client = index.app.test_client()
+
+    response = client.post(
+        "/api/v1/player-deletion",
+        json={"uid": "already-gone"},
+        headers={"Authorization": "Bearer valid-admin-token"},
+    )
+
+    # Un reintento tras un borrado parcial no debe fallar por "no existe".
+    assert response.status_code == 200
+    assert response.get_json()["uid"] == "already-gone"
+
+
+def test_player_deletion_returns_500_on_unexpected_auth_error(monkeypatch):
+    authenticate_as_admin(monkeypatch)
+
+    def raise_runtime_error(uid):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(index.auth, "delete_user", raise_runtime_error)
+    client = index.app.test_client()
+
+    response = client.post(
+        "/api/v1/player-deletion",
+        json={"uid": "user-123"},
+        headers={"Authorization": "Bearer valid-admin-token"},
+    )
+
+    assert response.status_code == 500
+    assert response.get_json() == {"error": "Internal server error"}

@@ -12,7 +12,7 @@ from decorators import require_role
 from errors import error_response
 from firebase_config import initialize_firebase
 from security import configure_cors, configure_security_headers
-from validators import validate_player_creation_payload
+from validators import validate_player_creation_payload, validate_player_deletion_payload
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -185,6 +185,36 @@ def player_creation():
     except Exception:
         app.logger.exception("Unexpected error while creating player")
         return error_response("Internal server error", 500)
+
+
+@app.route("/api/v1/player-deletion", methods=["POST"])
+@require_role("admin")
+def player_deletion():
+    """Elimina la cuenta de Auth de un jugador.
+
+    El cliente borra el lado de Firestore (expediente, subcolecciones y datos
+    relacionados) y llama aquí al final. Si este paso falla, los datos ya se
+    fueron pero queda una cuenta de acceso viva: por eso el error se devuelve
+    distinguible, para que el reintento se centre solo en la cuenta.
+    """
+    try:
+        data = validate_player_deletion_payload(request.get_json(silent=True))
+    except ValidationError as validation_error:
+        return error_response("Invalid request", 400, validation_error.messages)
+
+    uid = data["uid"]
+
+    try:
+        auth.delete_user(uid)
+    except auth.UserNotFoundError:
+        # Idempotente: si la cuenta ya no existe, el resultado es el mismo.
+        # Hace falta reintentar después de un borrado parcial.
+        pass
+    except Exception:
+        app.logger.exception("Unexpected error while deleting player account")
+        return error_response("Internal server error", 500)
+
+    return jsonify({"message": "Player account deleted", "uid": uid}), 200
 
 
 if __name__ == '__main__':
