@@ -1,5 +1,5 @@
 Flask
-Flask-Mail
+resend
 firebase-admin
 python-dotenv
 flask-cors

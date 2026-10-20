@@ -18,15 +18,19 @@ class Config:
         "http://localhost:4200",
     )
 
-    MAIL_SERVER = os.environ.get("MAIL_SERVER", "smtp.gmail.com")
-    MAIL_PORT = int(os.environ.get("MAIL_PORT", "587"))
-    MAIL_USE_TLS = os.environ.get("MAIL_USE_TLS", "true").lower() == "true"
-    MAIL_USE_SSL = os.environ.get("MAIL_USE_SSL", "false").lower() == "true"
-    MAIL_USERNAME = os.environ.get("GOOGLE_MAIL") or os.environ.get("MAIL_USERNAME")
-    MAIL_PASSWORD = os.environ.get("GOOGLE_MAIL_PASSWORD") or os.environ.get("MAIL_PASSWORD")
-    MAIL_DEFAULT_SENDER = (
-        os.environ.get("MAIL_SENDER_NAME", "Sistema Ascenso"),
-        MAIL_USERNAME,
+    # Resend. La llave vive en RESEND_AKEY (el nombre elegido en Vercel) y se
+    # acepta también RESEND_API_KEY, que es el que usa el SDK, por si la misma
+    # configuración se reutiliza en otro entorno.
+    RESEND_API_KEY = os.environ.get("RESEND_AKEY") or os.environ.get("RESEND_API_KEY")
+
+    # Remitente. Resend solo acepta direcciones de un dominio verificado en
+    # https://resend.com/domains. `onboarding@resend.dev` es la dirección de
+    # prueba de Resend y SOLO entrega en `delivered@resend.dev`, o sea que no
+    # sirve para mandarle credenciales a un paciente real: sirve para comprobar
+    # que la integración funciona.
+    RESEND_FROM = os.environ.get(
+        "RESEND_FROM",
+        "onboarding@resend.dev",
     )
 
     SECURITY_HEADERS_ENABLED = os.environ.get("SECURITY_HEADERS_ENABLED", "true").lower() == "true"

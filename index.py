@@ -2,10 +2,11 @@ import datetime
 import secrets
 import string
 
+import resend
 from firebase_admin import auth, firestore
 from flask import Flask, jsonify, render_template, request
-from flask_mail import Mail, Message
 from marshmallow import ValidationError
+from resend.exceptions import ResendError
 
 from config import Config
 from decorators import require_role
@@ -21,8 +22,6 @@ configure_cors(app, app.config["ALLOWED_ORIGINS"])
 if app.config["SECURITY_HEADERS_ENABLED"]:
     configure_security_headers(app)
 
-mail = Mail(app)
-
 initialize_firebase()
 
 
@@ -32,11 +31,34 @@ def generate_player_password():
 
 
 def send_new_player_email(email, display_name, password, premium_until_timestamp):
-    """Send the player their temporary password.
+    """Envía al jugador sus credenciales por Resend.
 
     The admin explicitly wants players to receive a password so they can enter
     the system. Keep this email, but do not return the password in API JSON.
+
+    Se usa la API de Resend en vez de SMTP de Gmail. Aparte de porque el
+    envío por SMTP venía fallando, Gmail exige una contraseña de aplicación
+    —otro secreto que girar— y limita el volumen; con Resend la llave vive
+    en una sola variable y el remitente se cambia sin redeployar.
+
+    `resend.Emails.send()` LANZA en vez de devolver un error, así que esta
+    función no captura nada: el llamador (player_creation) ya trata la
+    excepción y convierte el fallo en `emailSent: false` en la respuesta.
+
+    Sin `idempotency_key` a propósito. Deduplicar durante 24 h sonaría bien,
+    pero aquí cada alta genera una contraseña nueva: si se reintentara un
+    correo ya enviado, el paciente recibiría la contraseña vieja y no
+    podría entrar.
     """
+    if not app.config.get("RESEND_API_KEY"):
+        raise RuntimeError(
+            "Falta la llave de Resend: define RESEND_AKEY en el entorno."
+        )
+
+    # Se asigna aquí y no a nivel de módulo para que las pruebas puedan
+    # cambiar app.config sin tener que reimportar el paquete.
+    resend.api_key = app.config["RESEND_API_KEY"]
+
     premium_until = datetime.datetime.fromtimestamp(premium_until_timestamp).strftime('%d/%m/%Y')
     html = render_template(
         'new_player_email.html',
@@ -58,26 +80,33 @@ Tu acceso premium inicial estará activo hasta: {premium_until}
 Ingresa al sistema y cambia tu contraseña lo antes posible.
 """
 
-    message = Message(
-        subject='NOTIFICACIÓN DEL SISTEMA | Acceso Ascenso',
-        recipients=[email],
-        body=text,
-        html=html,
-    )
-    mail.send(message)
+    resend.Emails.send({
+        "from": app.config["RESEND_FROM"],
+        "to": [email],
+        "subject": 'NOTIFICACIÓN DEL SISTEMA | Acceso Ascenso',
+        "text": text,
+        "html": html,
+    })
 
 
 @app.route('/api/health')
 def health():
     """Liveness + diagnóstico de configuración.
 
-    No expone secretos: solo indica si las credenciales SMTP están
-    presentes, para poder saber sin mirar los logs si el correo de
-    bienvenida va a poder enviarse.
+    No expone secretos: solo indica si la llave de Resend está presente y
+    desde qué dirección se manda, para poder saber sin mirar los logs si el
+    correo de bienvenida va a poder enviarse y si está saliendo de un
+    dominio verificado.
     """
+    mail_from = app.config.get("RESEND_FROM", "")
     return jsonify({
         "status": "ok",
-        "mailConfigured": bool(app.config.get("MAIL_USERNAME") and app.config.get("MAIL_PASSWORD")),
+        "mailConfigured": bool(app.config.get("RESEND_API_KEY")),
+        "mailFrom": mail_from,
+        # Resend solo permite enviar desde onboarding@resend.dev hacia
+        # delivered@resend.dev. Si se ve esto en true, la integración
+        # funciona pero las credenciales NO le llegan al paciente.
+        "mailIsTestAddress": mail_from == "onboarding@resend.dev",
     }), 200
 
 

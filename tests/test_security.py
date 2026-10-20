@@ -2,6 +2,9 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+from resend.exceptions import ResendError
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 os.environ["SKIP_FIREBASE_INIT"] = "true"
@@ -230,3 +233,108 @@ def test_player_deletion_returns_500_on_unexpected_auth_error(monkeypatch):
 
     assert response.status_code == 500
     assert response.get_json() == {"error": "Internal server error"}
+
+
+# ---------------------------------------------------------------------------
+# Correo de bienvenida por Resend
+# ---------------------------------------------------------------------------
+
+def test_health_reports_mail_configuration_without_exposing_the_key():
+    client = index.app.test_client()
+
+    response = client.get("/api/health")
+    payload = response.get_json()
+
+    assert response.status_code == 200
+    # Sin la variable de entorno, no hay con qué enviar.
+    assert payload["mailConfigured"] is False
+    assert payload["mailFrom"] == "onboarding@resend.dev"
+    assert payload["mailIsTestAddress"] is True
+    # El diagnóstico no debe filtrar la llave ni nada parecido.
+    assert "key" not in payload
+    assert "RESEND" not in payload
+
+
+def test_health_reports_configured_sender_once_the_key_is_present(monkeypatch):
+    monkeypatch.setitem(index.app.config, "RESEND_API_KEY", "re_test_key")
+    monkeypatch.setitem(
+        index.app.config, "RESEND_FROM", "Nutricion <hola@dominio-verificado.com>"
+    )
+    client = index.app.test_client()
+
+    payload = client.get("/api/health").get_json()
+
+    assert payload["mailConfigured"] is True
+    assert payload["mailFrom"] == "Nutricion <hola@dominio-verificado.com>"
+    assert payload["mailIsTestAddress"] is False
+
+
+def test_send_welcome_email_fails_loudly_when_the_key_is_missing(monkeypatch):
+    monkeypatch.setitem(index.app.config, "RESEND_API_KEY", None)
+
+    # Que reviente aqui y no devuelva un exito silencioso: el llamador
+    # convierte la excepcion en emailSent: false, que es lo que se quiere.
+    with pytest.raises(RuntimeError, match="RESEND_AKEY"):
+        index.send_new_player_email("player@example.com", "Player One", "Player@1234", 0)
+
+
+def test_send_welcome_email_goes_through_resend_with_the_right_payload(monkeypatch):
+    monkeypatch.setitem(index.app.config, "RESEND_API_KEY", "re_test_key")
+    monkeypatch.setitem(index.app.config, "RESEND_FROM", "Nutricion <hola@dominio.com>")
+
+    sent = []
+    monkeypatch.setattr(
+        index.resend.Emails,
+        "send",
+        lambda params: sent.append(params) or {"id": "msg-1"},
+    )
+
+    # render_template necesita contexto de aplicación para encontrar la
+    # plantilla, así que se llama dentro de uno.
+    with index.app.app_context():
+        index.send_new_player_email(
+            "player@example.com", "Player One", "Player@1234", 1700000000
+        )
+
+    assert len(sent) == 1
+    params = sent[0]
+    assert params["from"] == "Nutricion <hola@dominio.com>"
+    assert params["to"] == ["player@example.com"]
+    assert "NOTIFICACIÓN DEL SISTEMA" in params["subject"]
+    # El password va en el correo, que es el unico sitio donde debe ir.
+    assert "Player@1234" in params["text"]
+    assert "Player@1234" in params["html"]
+    assert "player@example.com" in params["html"]
+
+
+def test_resend_failure_is_reported_as_email_not_sent(monkeypatch):
+    authenticate_as_admin(monkeypatch)
+    monkeypatch.setattr(index.auth, "create_user", lambda **kwargs: DummyUser())
+    monkeypatch.setattr(index.auth, "set_custom_user_claims", lambda uid, claims: None)
+    monkeypatch.setattr(index.firestore, "client", lambda: DummyFirestoreClient())
+    monkeypatch.setitem(index.app.config, "RESEND_API_KEY", "re_test_key")
+
+    def boom(params):
+        raise ResendError(
+            code=422,
+            error_type="validation_error",
+            message="The from address is not verified",
+            suggested_action="Verifica el dominio en resend.com/domains",
+        )
+
+    monkeypatch.setattr(index.resend.Emails, "send", boom)
+    client = index.app.test_client()
+
+    response = client.post(
+        "/api/v1/player-creation",
+        json={"email": "player@example.com", "displayName": "Player One", "age": 20},
+        headers={"Authorization": "Bearer valid-admin-token"},
+    )
+
+    # La cuenta SI se crea; solo falla el correo, y eso se avisa en la
+    # respuesta para que el nutriologo pueda entregar las credenciales a mano.
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload["emailSent"] is False
+    assert payload["emailError"] == "Failed to send welcome email"
+    assert "password" not in payload
