@@ -3,7 +3,6 @@ import sys
 from pathlib import Path
 
 import pytest
-from resend.exceptions import ResendError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -236,58 +235,63 @@ def test_player_deletion_returns_500_on_unexpected_auth_error(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Correo de bienvenida por Resend
+# Correo de bienvenida por SMTP de Brevo
 # ---------------------------------------------------------------------------
 
-def test_health_reports_mail_configuration_without_exposing_the_key():
+
+class DummyMail:
+    """Sustituye a flask_mail.Mail: registra el mensaje en vez de enviarlo."""
+
+    def __init__(self, error=None):
+        self.sent = []
+        self.error = error
+
+    def send(self, message):
+        if self.error:
+            raise self.error
+        self.sent.append(message)
+
+
+def test_health_reports_brevo_mail_configuration():
     client = index.app.test_client()
 
     response = client.get("/api/health")
     payload = response.get_json()
 
     assert response.status_code == 200
-    # Sin la variable de entorno, no hay con qué enviar.
+    assert payload["mailServer"] == "smtp-relay.brevo.com"
+    assert payload["mailSender"] == "genarocancinonutricion@gmail.com"
+    # Sin BREVO_KEY no hay con qué autenticarse, y el diagnóstico tiene que
+    # reflejarlo sin filtrar la contraseña.
     assert payload["mailConfigured"] is False
-    assert payload["mailFrom"] == "onboarding@resend.dev"
-    assert payload["mailIsTestAddress"] is True
-    # El diagnóstico no debe filtrar la llave ni nada parecido.
     assert "key" not in payload
-    assert "RESEND" not in payload
+    assert "password" not in payload
 
 
-def test_health_reports_configured_sender_once_the_key_is_present(monkeypatch):
-    monkeypatch.setitem(index.app.config, "RESEND_API_KEY", "re_test_key")
-    monkeypatch.setitem(
-        index.app.config, "RESEND_FROM", "Nutricion <hola@dominio-verificado.com>"
-    )
+def test_health_reports_configured_once_the_brevo_key_is_present(monkeypatch):
+    monkeypatch.setitem(index.app.config, "MAIL_PASSWORD", "brevo_secret")
     client = index.app.test_client()
 
     payload = client.get("/api/health").get_json()
 
     assert payload["mailConfigured"] is True
-    assert payload["mailFrom"] == "Nutricion <hola@dominio-verificado.com>"
-    assert payload["mailIsTestAddress"] is False
+    # Confirma que hay llave, pero nunca la suelta.
+    assert "brevo_secret" not in str(payload)
 
 
-def test_send_welcome_email_fails_loudly_when_the_key_is_missing(monkeypatch):
-    monkeypatch.setitem(index.app.config, "RESEND_API_KEY", None)
+def test_send_welcome_email_fails_loudly_when_the_brevo_key_is_missing(monkeypatch):
+    monkeypatch.setitem(index.app.config, "MAIL_PASSWORD", None)
 
     # Que reviente aqui y no devuelva un exito silencioso: el llamador
     # convierte la excepcion en emailSent: false, que es lo que se quiere.
-    with pytest.raises(RuntimeError, match="RESEND_AKEY"):
+    with pytest.raises(RuntimeError, match="BREVO_KEY"):
         index.send_new_player_email("player@example.com", "Player One", "Player@1234", 0)
 
 
-def test_send_welcome_email_goes_through_resend_with_the_right_payload(monkeypatch):
-    monkeypatch.setitem(index.app.config, "RESEND_API_KEY", "re_test_key")
-    monkeypatch.setitem(index.app.config, "RESEND_FROM", "Nutricion <hola@dominio.com>")
-
-    sent = []
-    monkeypatch.setattr(
-        index.resend.Emails,
-        "send",
-        lambda params: sent.append(params) or {"id": "msg-1"},
-    )
+def test_send_welcome_email_goes_through_smtp_with_the_right_payload(monkeypatch):
+    monkeypatch.setitem(index.app.config, "MAIL_PASSWORD", "brevo_secret")
+    dummy_mail = DummyMail()
+    monkeypatch.setattr(index, "mail", dummy_mail)
 
     # render_template necesita contexto de aplicación para encontrar la
     # plantilla, así que se llama dentro de uno.
@@ -296,33 +300,27 @@ def test_send_welcome_email_goes_through_resend_with_the_right_payload(monkeypat
             "player@example.com", "Player One", "Player@1234", 1700000000
         )
 
-    assert len(sent) == 1
-    params = sent[0]
-    assert params["from"] == "Nutricion <hola@dominio.com>"
-    assert params["to"] == ["player@example.com"]
-    assert "NOTIFICACIÓN DEL SISTEMA" in params["subject"]
+    assert len(dummy_mail.sent) == 1
+    message = dummy_mail.sent[0]
+    assert message.recipients == ["player@example.com"]
+    assert "NOTIFICACIÓN DEL SISTEMA" in message.subject
     # El password va en el correo, que es el unico sitio donde debe ir.
-    assert "Player@1234" in params["text"]
-    assert "Player@1234" in params["html"]
-    assert "player@example.com" in params["html"]
+    assert "Player@1234" in message.body
+    assert "player@example.com" in message.html
+    assert "Player@1234" in message.html
 
 
-def test_resend_failure_is_reported_as_email_not_sent(monkeypatch):
+def test_smtp_failure_is_reported_as_email_not_sent(monkeypatch):
     authenticate_as_admin(monkeypatch)
     monkeypatch.setattr(index.auth, "create_user", lambda **kwargs: DummyUser())
     monkeypatch.setattr(index.auth, "set_custom_user_claims", lambda uid, claims: None)
     monkeypatch.setattr(index.firestore, "client", lambda: DummyFirestoreClient())
-    monkeypatch.setitem(index.app.config, "RESEND_API_KEY", "re_test_key")
-
-    def boom(params):
-        raise ResendError(
-            code=422,
-            error_type="validation_error",
-            message="The from address is not verified",
-            suggested_action="Verifica el dominio en resend.com/domains",
-        )
-
-    monkeypatch.setattr(index.resend.Emails, "send", boom)
+    monkeypatch.setitem(index.app.config, "MAIL_PASSWORD", "brevo_secret")
+    monkeypatch.setattr(
+        index,
+        "mail",
+        DummyMail(error=RuntimeError("550 The following sender is not allowed")),
+    )
     client = index.app.test_client()
 
     response = client.post(

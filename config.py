@@ -18,19 +18,30 @@ class Config:
         "http://localhost:4200",
     )
 
-    # Resend. La llave vive en RESEND_AKEY (el nombre elegido en Vercel) y se
-    # acepta también RESEND_API_KEY, que es el que usa el SDK, por si la misma
-    # configuración se reutiliza en otro entorno.
-    RESEND_API_KEY = os.environ.get("RESEND_AKEY") or os.environ.get("RESEND_API_KEY")
+    # ------------------------------------------------------------------
+    # Correo por SMTP de Brevo
+    # ------------------------------------------------------------------
+    #
+    # Servidor, puerto y usuario de acceso NO son secretos: son datos
+    # públicos de Brevo. El usuario es un identificador de cuenta, inútil
+    # sin la contraseña. Se dejan fijos para que lo único que haya que
+    # tocar en Vercel sea la llave.
+    MAIL_SERVER = "smtp-relay.brevo.com"
+    MAIL_PORT = int(os.environ.get("MAIL_PORT", "587"))
+    MAIL_USE_TLS = True
+    MAIL_USERNAME = "88b372001@smtp-brevo.com"
 
-    # Remitente. Resend solo acepta direcciones de un dominio verificado en
-    # https://resend.com/domains. `onboarding@resend.dev` es la dirección de
-    # prueba de Resend y SOLO entrega en `delivered@resend.dev`, o sea que no
-    # sirve para mandarle credenciales a un paciente real: sirve para comprobar
-    # que la integración funciona.
-    RESEND_FROM = os.environ.get(
-        "RESEND_FROM",
-        "onboarding@resend.dev",
-    )
+    # El ÚNICO secreto del transporte. Vive en Vercel; no se sube a git.
+    MAIL_PASSWORD = os.environ.get("BREVO_KEY")
+
+    # Remitente que ve el paciente. Ojo: NO es lo mismo que MAIL_USERNAME.
+    # Brevo exige que esta dirección esté dada de alta en
+    # https://app.brevo.com/settings/senders/emails y verificada con el
+    # código que manda al propio buzón. Si no está, el envío se rechaza
+    # y el paciente no recibe nada.
+    MAIL_SENDER = os.environ.get("MAIL_SENDER", "genarocancinonutricion@gmail.com")
+    MAIL_SENDER_NAME = os.environ.get("MAIL_SENDER_NAME", "Nutrición Ascenso")
+
+    MAIL_DEFAULT_SENDER = (MAIL_SENDER_NAME, MAIL_SENDER)
 
     SECURITY_HEADERS_ENABLED = os.environ.get("SECURITY_HEADERS_ENABLED", "true").lower() == "true"
